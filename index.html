@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>天地传说</title>
+</head>
+<style>
+  html,
+  body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+  }
+
+  #main {
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    bottom: 0;
+    margin: auto;
+    border: 2px dashed #ccc;
+  }
+</style>
+
+<body>
+  <canvas id="main" width="500" height="700"></canvas>
+  <script>
+    let comboKeys = [];
+    let lastComboTs = 0;
+    let isDebug = false;
+    const main = document.getElementById("main");
+    var ctx = main.getContext("2d");
+    ctx.cW = main.width;
+    ctx.cH = main.height;
+    const { cW, cH } = ctx;
+    const heroDic = { "x": 0, "y": 0, "hX": 15, "hY": -10, "rcW": 30, "rcH": 30, "h": 60, "w": 60, "color": "skyblue", "arr": ["000000000000000011110000000100001100001000000010001010001001010000000001010001110001010012221101010012222101010001111101010000122101010000011001"], "colors": ["ffffffff", "000000ff", "fb9f1eff"], "colorCount": 3 };
+    const armDic = { "id": 'A00001', "isInHand": true, "rcW": 3, "rcH": 3, "gumW": 3, "gumH": 20, "w": 5, "h": 50, "rotate": 0, "color": "green", "arr": ["000000000000000011110000000100001100001000000010001010001001010000000001010001110001010012221101010012222101010001111101010000122101010000011001"] };
+    const aroundArmArr = [];
+    // const arrowDic = {}
+    const bulletDic = { "w": 5, "h": 5, "v": 3, "needDisappear": true }
+    const enemyArr = [
+      { "color": "red", "x": 200, "y": 110, "w": 10, "h": 10, "rcH": 5, "rcW": 5, "alive": true },
+      { "color": "red", "x": 350, "y": 220, "w": 10, "h": 10, "rcH": 5, "rcW": 5, "alive": true },
+      { "color": "red", "x": 200, "y": 130, "w": 10, "h": 10, "rcH": 5, "rcW": 5, "alive": true },
+      { "color": "red", "x": 130, "y": 80, "w": 20, "h": 20, "rcH": 10, "rcW": 10, "alive": true },
+    ]
+    const onceDic = {};
+    addEnemy()
+    addEnemy()
+    addEnemy()
+    addEnemy()
+    addEnemy()
+    function addEnemy() {
+      let r = Math.random() * 20 | 0 + 10;
+      let w = r;
+      let h = r;
+      let x = Math.random() * cW | 0;
+      let y = Math.random() * cH | 0;
+      enemyArr.push({ "color": "red", "x": x, "y": y, "w": w, "h": h, "rcH": h / 2, "rcW": w / 2, "alive": true })
+    }
+    function once(func, ...args) {
+      if (!onceDic[func.name]) {
+        onceDic[func.name] = true;
+        func(...args);
+      } else {
+        return;
+      }
+    }
+    heroDic.armArr = [armDic];
+    heroDic.isDashed = false;
+    heroDic.isHardDamage = false;
+    window.ctx = ctx;
+    const downKeyDic = {};
+    addRole(heroDic);
+    setInterval(() => {
+      let { cW, cH } = ctx;
+      for (const key in downKeyDic) {
+        if (downKeyDic.hasOwnProperty(key)) {
+          const state = downKeyDic[key];
+          if (state) {
+            let step = heroDic.isDashed ? 2 : 1;
+            if (checkIs2MoveKey()) {
+              step *= 0.707;
+            }
+            let rotateW = heroDic.isHardDamage ? 20 : 5;
+            switch (key) {
+              case 'w':
+                heroDic.y += step;
+                break;
+              case 'a':
+                heroDic.x -= step;
+                break;
+              case 's':
+                heroDic.y -= step;
+                break;
+              case 'd':
+                heroDic.x += step;
+                break;
+              case 'j':
+                armDic.rotate += rotateW;
+                break;
+              case 'k':
+                armDic.rotate -= rotateW;
+                break;
+              case 'l':
+                once(changeArm);
+              case ' ':
+                once(shoot, armDic, bulletDic);
+                break;
+              default:
+            }
+          }
+        }
+      }
+      // log(heroDic.x, heroDic.y)
+      addRole(heroDic);
+      showAroundArms(aroundArmArr);
+      const armArr = heroDic.armArr;
+      for (let i = 0; i < enemyArr.length; i++) {
+        const enemyDic = enemyArr[i];
+        if (!enemyDic.alive) continue;
+        const { x: eX, y: eY, w: eW, h: eH, rcH: eRcH, rcW: eRcW } = enemyDic;
+        let eX1 = eX - eRcW;
+        let eX2 = eX - eRcW + eW;
+        let eY1 = eY - eRcH;
+        let eY2 = eY - eRcH + eH;
+        onTrueDo(isDebug, ctx.fillRect, eX1, eY1, eW, eH);
+        log('armArr.length', armArr.length)
+        for (let j = 0; j < armArr.length; j++) {
+          const armDic = armArr[j];
+          const { x: aX, y: aY, w: aW, h: aH, rcH: aRcH, rcW: aRcW, rotate: aRotate } = armDic;
+          let needLog = false;
+          if (!armDic.isInHand) {
+            needLog = true;
+          }
+          const lR = Math.sqrt(aRcW ** 2 + aRcH ** 2);
+          const rR = Math.sqrt((aW - aRcW) ** 2 + (aH - aRcH) ** 2);
+          // 因为起始位置是垂直的，所以按-90来，然后因为y轴镜像，顺逆时针也逆向
+          let aX1 = Math.cos((-aRotate + 270) * Math.PI / 180) * lR + aX;
+          let aY1 = Math.sin((-aRotate + 270) * Math.PI / 180) * lR + aY;
+          let aX2 = Math.cos((-aRotate + 90) * Math.PI / 180) * rR + aX;
+          let aY2 = Math.sin((-aRotate + 90) * Math.PI / 180) * rR + aY;
+          onTrueDo(isDebug, ctx.fillRect, aX1, aY1, aX2 - aX1, aY2 - aY1);
+          onTrueDo(needLog, log, '2134123411111111111', aX1, aY1, aX2 - aX1, aY2 - aY1);
+          let isIn = false;
+          if (
+            judgeIntersect(aX1, aY1, aX2, aY2, eX1, eY2, eX2, eY2) // 上
+            || judgeIntersect(aX1, aY1, aX2, aY2, eX1, eY1, eX1, eY2) // 左
+            || judgeIntersect(aX1, aY1, aX2, aY2, eX1, eY1, eX2, eY1) // 下
+            || judgeIntersect(aX1, aY1, aX2, aY2, eX2, eY1, eX2, eY2) // 右 
+            || (eX1 < aX1 && eX2 > aX1 && eY1 < aY1 && eY2 > aY1) // 包含了子弹
+            || (eX1 < aX2 && eX2 > aX2 && eY1 < aY2 && eY2 > aY2))  // 包含了子弹
+          {
+            isIn = true;
+            enemyDic.alive = false;
+            break;
+          }
+        }
+        if (enemyDic.alive) {
+          // enemyDic.xV = enemyDic.xV || 0;
+          // enemyDic.yV = enemyDic.yV || 0;
+          // enemyDic.xV += ((Math.random() * 3 | 0) - 1) / 10;
+          // enemyDic.yV += ((Math.random() * 3 | 0) - 1) / 10;
+          // if (Math.random() > .5) {
+          //   enemyDic.x += (Math.random() * 3 | 0) * enemyDic.xV
+          //   enemyDic.y += (Math.random() * 3 | 0) * enemyDic.yV
+          // }
+          showSth(enemyDic);
+        }
+      }
+    }, 16.6)
+    let myHeroDashVar;
+    let myHeroDamageVar;
+    document.addEventListener('keydown', (ev) => {
+      // log(ev.key, 'down');
+      log(comboKeys);
+      const result = checkCombo(ev.key) || '';
+      if (result.indexOf('dash') > -1) {
+        heroDic.isDashed = true;
+        clearTimeout(myHeroDashVar);
+        myHeroDashVar = setTimeout(() => {
+          heroDic.isDashed = false;
+        }, 800)
+      } else if (result.indexOf('hard damage') > -1) {
+        heroDic.isHardDamage = true;
+        clearTimeout(myHeroDamageVar);
+        myHeroDamageVar = setTimeout(() => {
+          heroDic.isHardDamage = false;
+        }, 500)
+      }
+      log('checkCombo', result);
+      downKeyDic[ev.key] = true;
+      // switch (ev.key) {
+      //   case 'w':
+      //   case 'a':
+      //   case 's':
+      //   case 'd':
+      //     downKeyDic[ev.key] = true;
+      //     break;
+      //   case 'j':
+      //   case 'k':
+      //     downKeyDic[ev.key] = true;
+      //     break;
+      //   default:
+      // }
+      log(downKeyDic)
+    })
+    document.addEventListener('keyup', (ev) => {
+      log(ev.key, 'up');
+      dealCombo(ev.key);
+      downKeyDic[ev.key] = false;
+      if (ev.key == ' ') {
+        onceDic['shoot'] = false;
+      }
+      if (ev.key == 'l') {
+        onceDic['changeArm'] = false;
+      }
+      // switch (ev.key) {
+      //   case 'w':
+      //   case 'a':
+      //   case 's':
+      //   case 'd':
+      //     downKeyDic[ev.key] = false;
+      //     break;
+      //   case 'j':
+      //   case 'k':
+      //     downKeyDic[ev.key] = false;
+      //     break;
+      //   default:
+      // }
+    })
+    function checkIs2MoveKey() {
+      let keyDownCount = 0;
+      if (downKeyDic['w']) keyDownCount++;
+      if (downKeyDic['a']) keyDownCount++;
+      if (downKeyDic['s']) keyDownCount++;
+      if (downKeyDic['d']) keyDownCount++;
+      return keyDownCount > 1 ? true : false;
+    }
+    function checkCombo(key) {
+      dealCombo(key)
+      let comboKeyStr = comboKeys.join(',');
+      log('123', comboKeyStr, comboKeyStr.indexOf('d,d'));
+      comboKeys.pop();
+      if (comboKeyStr) {
+        if (comboKeyStr.indexOf('w,w') == comboKeyStr.length - 3) {
+          return 'up dash';
+        }
+        if (comboKeyStr.indexOf('a,a') == comboKeyStr.length - 3) {
+          return 'left dash';
+        }
+        if (comboKeyStr.indexOf('s,s') == comboKeyStr.length - 3) {
+          return 'down dash';
+        }
+        if (comboKeyStr.indexOf('d,d') == comboKeyStr.length - 3) {
+          return 'right dash';
+        }
+        if (comboKeyStr.indexOf('j,j') == comboKeyStr.length - 3) {
+          return 'hard damage';
+        }
+        if (comboKeyStr.indexOf('k,k') == comboKeyStr.length - 3) {
+          return 'hard damage';
+        }
+      }
+    }
+    function dealCombo(key) {
+      let nowTs = Date.now();
+      if (nowTs - lastComboTs > 100) {
+        comboKeys = [];
+      }
+      lastComboTs = nowTs;
+      comboKeys.push(key);
+    }
+    function showSth(sth) {
+      let { ctx } = window;
+      let { cW, cH } = ctx;
+      let { x, y, rcW, rcH, w, h, rotate, color } = sth;
+      rotate = rotate || 0;
+      rcW = rcW || w / 2;
+      rcH = rcH || h / 2;
+      // log('centerX, centerY', x, y, color)
+      ctx.fillStyle = color;
+      ctx.translate((x - rcW) | 0, (cH - (y - rcH)) | 0)
+      ctx.rotate(rotate * Math.PI / 180);
+      ctx.fillRect(rcW, rcH, w, -h);
+      ctx.rotate(-rotate * Math.PI / 180);
+      ctx.translate(-(x - rcW) | 0, -(cH - (y - rcH)) | 0)
+    }
+    function addRole(heroDic) {
+      let { ctx } = window;
+      let { cW, cH } = ctx;
+      let { x, y, w, h } = heroDic;
+      ctx.clearRect(0, 0, cW, cH);
+      showSth(heroDic);
+      const armArr = heroDic.armArr || [];
+      for (let i = 0; i < armArr.length; i++) {
+        const armDic = armArr[i];
+        showArm(heroDic, armDic);
+      }
+    }
+    function showAroundArms(armArr) {
+      for (let i = 0; i < armArr.length; i++) {
+        const armDic = armArr[i];
+        showSth(armDic);
+      }
+    }
+    function showArm(heroDic, armDic) {
+      let { ctx } = window;
+      let { cW, cH } = ctx;
+      let { x, y, hX, hY, w, h } = heroDic;
+      let { x: armX, y: armY, w: armW, h: armH } = armDic;
+      if (armDic.isInHand) {
+        armDic.x = heroDic.x + heroDic.hX;
+        armDic.y = heroDic.y + heroDic.hY;
+      }
+      if (armDic.xV) armDic.x += armDic.xV;
+      if (armDic.yV) armDic.y += armDic.yV;
+      if (armDic.needDisappear) {
+        if (armDic.x < 0 || armDic.y < 0 || armDic.x > cW || armDic.y > cH) { }
+      }
+      showSth(armDic);
+    }
+    function judgeIntersect(x1, y1, x2, y2, x3, y3, x4, y4) {
+
+      //快速排斥：
+      //两个线段为对角线组成的矩形，如果这两个矩形没有重叠的部分，那么两条线段是不可能出现重叠的
+
+      //这里的确如此，这一步是判定两矩形是否相交
+      //1.线段ab的低点低于cd的最高点（可能重合）
+      //2.cd的最左端小于ab的最右端（可能重合）
+      //3.cd的最低点低于ab的最高点（加上条件1，两线段在竖直方向上重合）
+      //4.ab的最左端小于cd的最右端（加上条件2，两直线在水平方向上重合）
+      //综上4个条件，两条线段组成的矩形是重合的
+      //特别要注意一个矩形含于另一个矩形之内的情况
+
+      if (!(Math.min(x1, x2) <= Math.max(x3, x4) && Math.min(y3, y4) <= Math.max(y1, y2) && Math.min(x3, x4) <= Math.max(x1, x2) && Math.min(y1, y2) <= Math.max(y3, y4)))
+        return false;
+
+      //跨立实验：
+      //如果两条线段相交，那么必须跨立，就是以一条线段为标准，另一条线段的两端点一定在这条线段的两段
+      //也就是说a b两点在线段cd的两端，c d两点在线段ab的两端
+      var u, v, w, z
+      u = (x3 - x1) * (y2 - y1) - (x2 - x1) * (y3 - y1);
+      v = (x4 - x1) * (y2 - y1) - (x2 - x1) * (y4 - y1);
+      w = (x1 - x3) * (y4 - y3) - (x4 - x3) * (y1 - y3);
+      z = (x2 - x3) * (y4 - y3) - (x4 - x3) * (y2 - y3);
+      return (u * v <= 0.00000001 && w * z <= 0.00000001);
+    }
+    function shoot(armDic, bulletDic) {
+      let bDic = JSON.parse(JSON.stringify(bulletDic));
+      bDic.xV = Math.cos((-armDic.rotate + 90) * Math.PI / 180) * bDic.v;
+      bDic.yV = Math.sin((-armDic.rotate + 90) * Math.PI / 180) * bDic.v;
+      const rR = Math.sqrt((armDic.h - armDic.rcW) ** 2 + (armDic.w - armDic.rcH) ** 2);
+      bDic.x = armDic.x + Math.cos((-armDic.rotate + 90) * Math.PI / 180) * rR;
+      bDic.y = armDic.y + Math.sin((-armDic.rotate + 90) * Math.PI / 180) * rR;
+      bDic.rcW = bDic.w / 2;
+      bDic.rcH = bDic.h / 2;
+      bDic.rotate = 0;
+      heroDic.armArr.push(bDic);
+      log('shoot', heroDic.armArr.length)
+    }
+    function dropArm(heroDic, needDropArmDic) {
+      let { armArr } = heroDic;
+      let { id: needDropArmId } = needDropArmDic;
+      for (let i = 0; i < armArr.length; i++) {
+        const armDic = armArr[i];
+        if (needDropArmId === armDic.id) {
+          armArr.splice(i, 1);
+          console.log('armArr', armArr, heroDic.armArr)
+          aroundArmArr.push(needDropArmDic);
+          console.log('is droped')
+          return true;
+        }
+      }
+      return false;
+    }
+    function catchArm(heroDic) {
+      console.log(aroundArmArr.length);
+      let needCatchArmDic;
+      let minD = 20;
+      let catchedIdx;
+      for (let i = 0; i < aroundArmArr.length; i++) {
+        const armDic = aroundArmArr[i];
+        let xD = Math.abs(armDic.x - (heroDic.x + heroDic.hX));
+        let yD = Math.abs(armDic.y - (heroDic.y + heroDic.hY));
+        if (xD < minD && yD < minD) {
+          minD = Math.min(xD, yD);
+          catchedIdx = i;
+          needCatchArmDic = armDic;
+          console.log('is catched')
+        }
+      }
+      if (needCatchArmDic) {
+          aroundArmArr.splice(catchedIdx, 1);
+          heroDic.armArr.push(needCatchArmDic);
+      }
+      return;
+    }
+
+    function changeArm() {
+      if (!aroundArmArr.length) {
+        dropArm(heroDic, armDic);
+      } else {
+        catchArm(heroDic, armDic);
+      }
+    };
+    function log(...args) {
+      if (isDebug) {
+        log(args.join(' '));
+      }
+    }
+    function onTrueDo(state, ...args) {
+      if (state) log(...args);
+    }
+  </script>
+</body>
+
+</html>
