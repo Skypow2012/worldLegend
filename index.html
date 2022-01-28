@@ -320,6 +320,12 @@
       if (armDic.yV) armDic.y += armDic.yV;
       if (armDic.needDisappear) {
         if (armDic.x < 0 || armDic.y < 0 || armDic.x > cW || armDic.y > cH) { }
+        if (armDic.options && armDic.options.bouncy) {
+          if (armDic.x < 0 && armDic.xV < 0) armDic.xV = -armDic.xV;
+          if (armDic.x + armDic.w > cW && armDic.xV > 0) armDic.xV = -armDic.xV;
+          if (armDic.y < 0 && armDic.yV < 0) armDic.yV = -armDic.yV;
+          if (armDic.y + armDic.h > cH && armDic.yV > 0) armDic.yV = -armDic.yV;
+        }
       }
       showSth(armDic);
     }
@@ -359,6 +365,7 @@
       bDic.rcW = bDic.w / 2;
       bDic.rcH = bDic.h / 2;
       bDic.rotate = 0;
+      bDic.options = { bouncy: true }; // 自带是否弹跳
       heroDic.armArr.push(bDic);
       log('shoot', heroDic.armArr.length)
     }
