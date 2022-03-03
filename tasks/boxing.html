@@ -10,6 +10,12 @@
   <meta http-equiv="X-UA-Compatible" content="ie=edge">
   <script src="https://tekii.cn/js/vconsole.min.js"></script>
   <title>Document</title>
+  <style>
+    /* #copyInput {
+      position: absolute;
+      top: -100px;
+    } */
+  </style>
 </head>
 
 <body>
@@ -20,6 +26,8 @@
   x:<span id="xDom"></span><br />
   y:<span id="yDom"></span><br />
   z:<span id="zDom"></span><br />
+  <button onclick="copy(JSON.stringify(keyPointsArr))">拷贝动作数据</button><br/>
+  <input id="copyInput"/>
 </body>
 <script>
   
@@ -36,9 +44,19 @@
         }
       }) 
   }
+  function copy(txt) {
+    console.log(txt);
+    copyInput.value = txt;
+    copyInput.select(); //选择对象  
+    document.execCommand("Copy"); //执行浏览器复制命令  
+    copyInput.blur();
+  }
   if (window.DeviceOrientationEvent) {
     window.addEventListener('deviceorientation', function (event) {
       var {alpha, beta, gamma} = event;
+      window.a = alpha;
+      window.b = beta;
+      window.g = gamma;
 
       alphaDom.innerHTML = Math.round(alpha);
       betaDom.innerHTML = Math.round(beta);
@@ -52,8 +70,16 @@
 
 <script>
   let max = 0;
+  cnt = 0;
+  let sTs = Infinity;
   // html5陀螺仪
+  let keyPoints = []; // a b g x y z
+  let keyPointsArr = []; // 存储动作列表
+  let isStartGetKeyPoints = false;
   window.addEventListener("devicemotion", function (event) {
+    let ts = Date.now();
+    if (ts < sTs) sTs = ts;
+    cnt += 1;
     // x(y, z) : 设备在x(y, z)方向上的移动加速度值
     var {x, y, z} = event.acceleration;
     xDom.innerText = x;
@@ -61,8 +87,24 @@
     zDom.innerText = z;
     let maxV = Math.max(Math.abs(x), Math.abs(y), Math.abs(z));
     if (maxV > max) max = maxV;
-    if (maxV > 1) {
-      console.log('超过1g', maxV, max);
+    if (maxV > 2) {
+      console.log('超过2g，开始收集动作', maxV, max);
+      isStartGetKeyPoints = true;
+    }
+    if (isStartGetKeyPoints) {
+      if (keyPoints.length >= 576) { // 576 / (6*60) = 1.6s 24*24
+        isStartGetKeyPoints = false;
+        keyPointsArr.push(keyPoints);
+        keyPoints = [];
+        console.log('已完成收集', keyPointsArr.length, '个动作');
+      } else {
+        keyPoints.push(Math.round(a, 2));
+        keyPoints.push(Math.round(b, 2));
+        keyPoints.push(Math.round(g, 2));
+        keyPoints.push(Math.round(x, 2));
+        keyPoints.push(Math.round(y, 2));
+        keyPoints.push(Math.round(z, 2));
+      }
     }
 
     // // 考虑了重力加速度后设备在x(y, z)水平上的移动加速度值
@@ -72,6 +114,10 @@
     // console.log(event.rotationRare);
 
   }, true);
+  // setTimeout(()=>{ // 测试检测频率
+  //   console.log('cnt', cnt, cnt / (Date.now() - sTs) * 1000); // 大约1秒60次
+  // }, 5000)
+
   // window.addEventListener("compassneedscalibration", function (event) {
   //   // 弹出提示 , 用户需要罗盘校准 event.preventDefault();
   // }, true)
