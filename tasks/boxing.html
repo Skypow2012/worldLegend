@@ -9,6 +9,7 @@
     content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
   <meta http-equiv="X-UA-Compatible" content="ie=edge">
   <script src="https://tekii.cn/js/vconsole.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/onnxjs/dist/onnx.min.js"></script>
   <title>Document</title>
   <style>
     /* #copyInput {
@@ -27,7 +28,8 @@
   y:<span id="yDom"></span><br />
   z:<span id="zDom"></span><br />
   <button onclick="copy(JSON.stringify(keyPointsArr))">拷贝动作数据</button><br/>
-  <input id="copyInput"/>
+  <input id="copyInput"/><br/>
+  <p id="out"></p>
 </body>
 <script>
   
@@ -69,12 +71,80 @@
 </script>
 
 <script>
+  
+  let keyPointsArr = []; // 存储动作列表
   let max = 0;
+  console.log(234)
+  toOnnxInput()
+  function toOnnxInput(keyPoints) {
+    if (!keyPoints) {
+      keyPoints = []
+      for (let i = 0; i < 576; i++) {
+        keyPoints.push(i%6)
+      }
+    }
+    arr_8_12s = []
+    let max = -Infinity;
+    let min = Infinity;
+    for (let i = 0; i < 6; i++) {
+      for (let j = 0; j < 96; j++) {
+        if (i >= 3) {
+          if (keyPoints[j*6+i] > max) max = keyPoints[j*6+i];
+          if (keyPoints[j*6+i] < min) min = keyPoints[j*6+i];
+          arr_8_12s.push(keyPoints[j*6+i]);
+        }
+      }
+    }
+    max += 0.00001; // 防止max-min为0
+    console.log(max, min, max - min)
+    arr_32_32s = []
+    for (let c = 0; c < 3; c++) {
+      for (let i = 0; i < 32; i++) {
+        for (let j = 0; j < 32; j++) {
+          p1x = i / 32 * 8 | 0;
+          p1y = j / 32 * 12 | 0;
+          idx = p1y*8+p1x+c*96;
+          arr_32_32s.push((arr_8_12s[idx]-min)/(max-min)); // 转到0-1之间
+          // console.log((arr_8_12s[idx]-min)/(max-min))
+        }
+      }
+    }
+    window.arr_32_32s = arr_32_32s;
+    return arr_32_32s;
+  }
+  function getInputs() {
+    const x = new Float32Array(1 * 3 * 32 * 32).fill(1);
+    const tensorX = new onnx.Tensor(window.arr_32_32s, 'float32', [1, 3, 32, 32]);
+    // const x = new Float32Array(576).fill(1);
+    // const x = []
+    // for (let i = 0; i < 576; i++) {
+    //   x.push(Math.random() * 2 - 1);
+    // }
+    // console.log(1234)
+    // const tensorX = new onnx.Tensor(x, 'float32', [576]);
+    
+    return [tensorX]
+  }
+  // create a session
+  const myOnnxSession = new onnx.InferenceSession();
+  // load the ONNX model file
+  // myOnnxSession.loadModel("./boxing_runing.onnx").then(() => {
+  myOnnxSession.loadModel("./boxing.onnx").then(() => {
+    // generate model input
+    const inferenceInputs = getInputs();
+    window.inferenceInputs = inferenceInputs;
+    // execute the model
+    myOnnxSession.run(inferenceInputs).then((output) => {
+      // consume the output
+      const outputTensor = output.values().next().value;
+      window.outputTensor = outputTensor;
+      console.log(`model output tensor: ${outputTensor.data}.`);
+    });
+  });
   cnt = 0;
   let sTs = Infinity;
   // html5陀螺仪
   let keyPoints = []; // a b g x y z
-  let keyPointsArr = []; // 存储动作列表
   let isStartGetKeyPoints = false;
   window.addEventListener("devicemotion", function (event) {
     let ts = Date.now();
@@ -95,8 +165,42 @@
       if (keyPoints.length >= 576) { // 576 / (6*60) = 1.6s 24*24
         isStartGetKeyPoints = false;
         keyPointsArr.push(keyPoints);
-        keyPoints = [];
         console.log('已完成收集', keyPointsArr.length, '个动作');
+        
+        input = toOnnxInput(keyPoints);
+        console.log(input)
+        keyPoints = [];
+        // var inferenceInputs = new onnx.Tensor(input, 'float32', [1, 3, 32, 32]);
+        // myOnnxSession.run(inferenceInputs).then((output) => {
+        //   // consume the output
+        //   const outputTensor = output.values().next().value;
+        //   window.outputTensor = outputTensor;
+        //   console.log('outputTensor')
+        //   console.log(`model output tensor: ${outputTensor.data}.`);
+          
+        // });
+        
+        const inferenceInputs = getInputs();
+        window.inferenceInputs = inferenceInputs;
+        // execute the model
+        myOnnxSession.run(inferenceInputs).then((output) => {
+          // consume the output
+          const outputTensor = output.values().next().value;
+          window.outputTensor = outputTensor;
+          console.log(`model output tensor: ${outputTensor.data}.`);
+          // actionMap = {0:'defense', 1:'straight_punch', 2:'uppercut'};
+          actionMap = {0:'防御', 1:'直拳', 2:'上勾拳'};
+          outIdx = -1;
+          maxVal = -Infinity;
+          for (let i = 0; i < outputTensor.data.length; i++) {
+            if (outputTensor.data[i] > maxVal) {
+              maxVal = outputTensor.data[i];
+              outIdx = i;
+            }
+          }
+          console.log(outIdx);
+          out.innerText = actionMap[outIdx]
+        });
       } else {
         keyPoints.push(Math.round(a, 2));
         keyPoints.push(Math.round(b, 2));
