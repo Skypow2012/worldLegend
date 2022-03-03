@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<!-- https://zhuanlan.zhihu.com/p/114841884 html 关于陀螺仪知识 -->
+<!-- https://codeantenna.com/a/c0hOpqgo11 html5的陀螺仪 -->
+<!-- https://www.jianshu.com/p/c8515f55c1ac 解决ios13无法启动陀螺仪/重力问题 -->
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport"
+    content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <script src="https://tekii.cn/js/vconsole.min.js"></script>
+  <title>Document</title>
+</head>
+
+<body>
+  <button onclick="getPermit()">获取陀螺仪权限</button><br/>
+  alpha:<span id="alphaDom"></span><br />
+  beta:<span id="betaDom"></span><br />
+  gamma:<span id="gammaDom"></span><br />
+  x:<span id="xDom"></span><br />
+  y:<span id="yDom"></span><br />
+  z:<span id="zDom"></span><br />
+</body>
+<script>
+  
+  function getPermit() {
+    // 需要https，否则默认拒绝
+    window.DeviceOrientationEvent.requestPermission()
+      .then(state => {
+        if (state === "granted") { //允许
+          alert("用户允许")
+        } else if (state === "denied") { //拒绝
+          alert("用户拒绝")
+        } else if (state === "prompt") {
+          alert("用户干了啥")
+        }
+      }) 
+  }
+  if (window.DeviceOrientationEvent) {
+    window.addEventListener('deviceorientation', function (event) {
+      var {alpha, beta, gamma} = event;
+
+      alphaDom.innerHTML = Math.round(alpha);
+      betaDom.innerHTML = Math.round(beta);
+      gammaDom.innerHTML = Math.round(gamma);
+
+    }, false);
+  } else {
+    document.querySelector('body').innerHTML = '你的浏览器不支持陀螺仪';
+  }
+</script>
+
+<script>
+  let max = 0;
+  // html5陀螺仪
+  window.addEventListener("devicemotion", function (event) {
+    // x(y, z) : 设备在x(y, z)方向上的移动加速度值
+    var {x, y, z} = event.acceleration;
+    xDom.innerText = x;
+    yDom.innerText = y;
+    zDom.innerText = z;
+    let maxV = Math.max(Math.abs(x), Math.abs(y), Math.abs(z));
+    if (maxV > max) max = maxV;
+    if (maxV > 1) {
+      console.log('超过1g', maxV, max);
+    }
+
+    // // 考虑了重力加速度后设备在x(y, z)水平上的移动加速度值
+    // console.log(event.accelerationIncludingGravity);
+
+    // // alpha , bate , gamma : 设备绕x, y, z轴旋转的角度 , 相对适合手机在运动的情况下 , 比如把手机扔到空中
+    // console.log(event.rotationRare);
+
+  }, true);
+  // window.addEventListener("compassneedscalibration", function (event) {
+  //   // 弹出提示 , 用户需要罗盘校准 event.preventDefault();
+  // }, true)
+</script>
+
+</html>
